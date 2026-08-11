@@ -1,0 +1,187 @@
+﻿@{
+    ViewData["Title"] = "Hastaneler Arası Aktarım";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var hospitals = ViewBag.Hospitals as Microsoft.AspNetCore.Mvc.Rendering.SelectList
+                    ?? new Microsoft.AspNetCore.Mvc.Rendering.SelectList(new List<object>());
+}
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+}
+
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-body">
+            <h1 class="card-title fw-semibold mb-3">Hastaneler Arası Aktarım</h1>
+            <p class="text-muted">
+                Bir üründen kaynak hastaneden hedef hastaneye aktarım yapın. Miktar seçtiğiniz birime göre
+                (Kutu / Test / Flakon) teste çevrilip kaynaktan düşülür, hedefe eklenir. Her iki tarafa açıklamalı iz düşer.
+            </p>
+
+            <form asp-action="Transfer" method="post" onsubmit="return validateTransfer()">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Kaynak Hastane</label>
+                        <select id="sourceHospital" name="sourceHospitalId" class="form-select" onchange="refreshStock()">
+                            <option value="">Seçin...</option>
+                            @foreach (var h in hospitals)
+                            {
+                                <option value="@h.Value">@h.Text</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Hedef Hastane</label>
+                        <select id="destHospital" name="destinationHospitalId" class="form-select">
+                            <option value="">Seçin...</option>
+                            @foreach (var h in hospitals)
+                            {
+                                <option value="@h.Value">@h.Text</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <hr class="my-3" />
+
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label">Barkod / Referans</label>
+                        <input type="text" id="barcode" class="form-control" placeholder="Barkod okutun veya referans girin" />
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-primary w-100" onclick="fetchProduct()">Ürünü Getir</button>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Ürün</label>
+                        <input type="text" id="productName" class="form-control" readonly />
+                    </div>
+                </div>
+
+                <div class="row g-3 align-items-end mt-1">
+                    <div class="col-md-3">
+                        <label class="form-label">Birim</label>
+                        <select id="unit" name="unit" class="form-select" onchange="updatePreview()">
+                            <option value="Kutu">Kutu</option>
+                            <option value="Test">Test</option>
+                            <option value="Flakon">Flakon</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Miktar</label>
+                        <input type="number" id="quantity" name="quantity" class="form-control" min="1" value="1" oninput="updatePreview()" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">≈ Test</label>
+                        <input type="text" id="testPreview" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Kaynakta Mevcut</label>
+                        <input type="text" id="stockInfo" class="form-control" readonly placeholder="—" />
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    <div class="col-md-12">
+                        <label class="form-label">Açıklama / Not</label>
+                        <textarea id="note" name="note" class="form-control" rows="2" placeholder="Aktarım nedeni, teslim alan kişi vb. (opsiyonel)"></textarea>
+                    </div>
+                </div>
+
+                <input type="hidden" id="referenceNumber" name="referenceNumber" />
+
+                <button type="submit" class="btn btn-lg btn-success mt-3">Aktarımı Yap</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    let current = null; // {referenceNumber, productName, boxTextCount, flaconCountPerBox}
+
+    function toTests(quantity, unit, p) {
+        if (!p) return 0;
+        if (unit === "Kutu") return quantity * (p.boxTextCount || 0);
+        if (unit === "Flakon") {
+            if (!p.flaconCountPerBox || !p.boxTextCount) return 0;
+            return Math.round(quantity * p.boxTextCount / p.flaconCountPerBox);
+        }
+        return quantity; // Test
+    }
+
+    function updatePreview() {
+        if (!current) { document.getElementById('testPreview').value = ""; return; }
+        const q = parseInt(document.getElementById('quantity').value) || 0;
+        const u = document.getElementById('unit').value;
+        document.getElementById('testPreview').value = toTests(q, u, current);
+    }
+
+    function applyProduct(p) {
+        current = {
+            referenceNumber: p.referenceNumber || "",
+            productName: p.productName || "",
+            boxTextCount: p.boxTextCount || 0,
+            flaconCountPerBox: p.flaconCountPerBox || 0
+        };
+        document.getElementById('productName').value = current.productName;
+        document.getElementById('referenceNumber').value = current.referenceNumber;
+        updatePreview();
+        refreshStock();
+    }
+
+    async function fetchProduct() {
+        const input = document.getElementById('barcode').value.trim();
+        if (!input) { alert("Barkod / referans boş olamaz."); return; }
+
+        try {
+            // 1) Barkod olarak dene
+            let res = await fetch(`/Stock/GetProductDetailsByBarcode?barcode=${encodeURIComponent(input)}`);
+            let data = await res.json();
+            if (data.success) { applyProduct(data.product); return; }
+
+            // 2) Bulunamazsa referans numarası olarak dene
+            res = await fetch(`/Stock/GetProductByReference?referenceNumber=${encodeURIComponent(input)}`);
+            data = await res.json();
+            if (data.success) { applyProduct(data.product); return; }
+
+            current = null;
+            document.getElementById('productName').value = "";
+            document.getElementById('referenceNumber').value = "";
+            alert("Ürün bulunamadı. Barkodu ya da referans numarasını kontrol edin.");
+        } catch {
+            alert("Ürün bilgisi alınırken hata oluştu.");
+        }
+    }
+
+    function refreshStock() {
+        const ref = document.getElementById('referenceNumber').value;
+        const src = document.getElementById('sourceHospital').value;
+        const box = document.getElementById('stockInfo');
+        if (!ref || !src) { box.value = "—"; return; }
+
+        fetch(`/Stock/GetStockInfo?referenceNumber=${encodeURIComponent(ref)}&hospitalId=${src}`)
+            .then(r => r.json())
+            .then(data => {
+                box.value = data.success ? `${data.testCount} test` : "—";
+            })
+            .catch(() => { box.value = "—"; });
+    }
+
+    function validateTransfer() {
+        const src = document.getElementById('sourceHospital').value;
+        const dst = document.getElementById('destHospital').value;
+        const ref = document.getElementById('referenceNumber').value;
+        const q = parseInt(document.getElementById('quantity').value) || 0;
+
+        if (!src || !dst) { alert("Kaynak ve hedef hastane seçin."); return false; }
+        if (src === dst) { alert("Kaynak ve hedef hastane aynı olamaz."); return false; }
+        if (!ref) { alert("Önce ürünü getirin."); return false; }
+        if (q <= 0) { alert("Miktar 0'dan büyük olmalı."); return false; }
+        return true;
+    }
+</script>

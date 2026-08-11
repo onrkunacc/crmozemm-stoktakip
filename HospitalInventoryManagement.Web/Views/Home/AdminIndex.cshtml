@@ -1,0 +1,211 @@
+﻿@model HospitalInventoryManagement.Web.ViewModel.AdminStockListViewModel
+@{
+    ViewData["Title"] = "Hastane Stok Takip";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    var now = DateTime.Now;
+    var soon = now.AddDays(60);
+
+    int Boxes(int test, int box) => box > 0 ? test / box : 0;
+    int Rem(int test, int box) => box > 0 ? test % box : test;
+    string Scope = Model.SelectedHospitalID.HasValue ? "Seçili Hastane" : "Tüm Hastaneler";
+}
+
+<div class="container-fluid">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-semibold mb-0">Hastane Stok Takip</h3>
+        <span class="badge bg-primary fs-6">@Scope</span>
+    </div>
+
+    <!-- Özet kartlar -->
+    <div class="row">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-info-subtle">
+                            <i class="ti ti-list-details fs-6 text-info"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.TotalRecords</h4>
+                            <span class="text-muted">Stok Kaydı</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-success-subtle">
+                            <i class="ti ti-flask fs-6 text-success"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.TotalTests.ToString("N0")</h4>
+                            <span class="text-muted">Toplam Test</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-warning-subtle">
+                            <i class="ti ti-alert-triangle fs-6 text-warning"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.LowStockCount</h4>
+                            <span class="text-muted">Kutu Altı Ürün</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-danger-subtle">
+                            <i class="ti ti-calendar-time fs-6 text-danger"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.ExpiringSoonCount</h4>
+                            <span class="text-muted">SKT 60 Gün İçinde</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Stok tablosu -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title fw-semibold mb-3">Stok Listesi</h5>
+
+                    <form method="get" class="mb-3">
+                        <input type="hidden" name="sortOrder" value="@Model.SortOrder" />
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-6">
+                                <label class="form-label">Hastane</label>
+                                <select name="hospitalId" asp-for="SelectedHospitalID" asp-items="Model.Hospitals"
+                                        onchange="this.form.submit()" class="form-select">
+                                    <option value="">Tüm Hastaneler</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label d-block">Sıralama</label>
+                                <div class="btn-group flex-wrap" role="group">
+                                    <button class="btn btn-outline-primary btn-sm @(Model.SortOrder == "NameAsc" ? "active" : "")" type="submit" name="sortOrder" value="NameAsc">Ad ↑</button>
+                                    <button class="btn btn-outline-primary btn-sm @(Model.SortOrder == "NameDesc" ? "active" : "")" type="submit" name="sortOrder" value="NameDesc">Ad ↓</button>
+                                    <button class="btn btn-outline-primary btn-sm @(Model.SortOrder == "DateAsc" ? "active" : "")" type="submit" name="sortOrder" value="DateAsc">Tarih ↑</button>
+                                    <button class="btn btn-outline-primary btn-sm @(Model.SortOrder == "DateDesc" ? "active" : "")" type="submit" name="sortOrder" value="DateDesc">Tarih ↓</button>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+
+                    @if (Model.Stocks == null || !Model.Stocks.Any())
+                    {
+                        <p class="text-muted mb-0">Kayıt bulunamadı.</p>
+                    }
+                    else
+                    {
+                        <div class="table-responsive" style="max-height:560px; overflow:auto;">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light" style="position:sticky; top:0;">
+                                    <tr>
+                                        <th>Ürün</th>
+                                        <th>Hastane</th>
+                                        <th class="text-end">Test</th>
+                                        <th>Kutu / Test</th>
+                                        <th>Son Kullanma</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var stock in Model.Stocks)
+                                    {
+                                        var low = stock.BoxTextCount > 0 && stock.TestCount < stock.BoxTextCount;
+                                        var expiringSoon = stock.ExpiryDate > now && stock.ExpiryDate <= soon;
+                                        <tr>
+                                            <td class="fw-semibold">@stock.ProductName</td>
+                                            <td>@stock.HospitalName</td>
+                                            <td class="text-end">
+                                                @if (low)
+                                                {
+                                                    <span class="badge bg-warning-subtle text-warning">@stock.TestCount</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="fw-semibold">@stock.TestCount</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (Boxes(stock.TestCount, stock.BoxTextCount) > 0)
+                                                {
+                                                    <text>@Boxes(stock.TestCount, stock.BoxTextCount) kutu + @Rem(stock.TestCount, stock.BoxTextCount) test</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>@stock.TestCount test</text>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (expiringSoon)
+                                                {
+                                                    <span class="badge bg-danger-subtle text-danger">@stock.ExpiryDate.ToString("dd.MM.yyyy")</span>
+                                                }
+                                                else
+                                                {
+                                                    @stock.ExpiryDate.ToString("dd.MM.yyyy")
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Miadı yaklaşanlar -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title fw-semibold mb-3">Miadı Yaklaşanlar</h5>
+                    @if (Model.ExpiringSoon == null || !Model.ExpiringSoon.Any())
+                    {
+                        <p class="text-muted mb-0">60 gün içinde miadı dolacak ürün yok. 👍</p>
+                    }
+                    else
+                    {
+                        <ul class="list-unstyled mb-0">
+                            @foreach (var e in Model.ExpiringSoon)
+                            {
+                                var days = (e.ExpiryDate.Date - now.Date).Days;
+                                <li class="d-flex justify-content-between align-items-start py-2 border-bottom">
+                                    <div>
+                                        <span class="fw-semibold d-block">@e.ProductName</span>
+                                        <small class="text-muted">@e.HospitalName · @e.TestCount test</small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge @(days <= 14 ? "bg-danger" : "bg-danger-subtle text-danger")">@e.ExpiryDate.ToString("dd.MM.yyyy")</span>
+                                        <small class="text-muted d-block">@days gün</small>
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

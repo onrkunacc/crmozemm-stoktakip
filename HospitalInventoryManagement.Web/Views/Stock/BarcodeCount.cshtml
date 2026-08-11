@@ -1,0 +1,393 @@
+﻿@{
+    ViewData["Title"] = "Barkod Sayımı";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+}
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger">@TempData["ErrorMessage"]</div>
+}
+
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-body">
+            <h1 class="card-title fw-semibold mb-3">Barkod Sayımı (Test Bazlı)</h1>
+
+            <div class="row g-2 align-items-end mb-2">
+                <div class="col-md-5">
+                    <label class="form-label fw-semibold">Hastane</label>
+                    <select id="hospitalSelect" class="form-select">
+                        @foreach (var h in (SelectList)ViewBag.Hospitals)
+                        {
+                            if (h.Selected)
+                            {
+                                <option value="@h.Value" selected>@h.Text</option>
+                            }
+                            else
+                            {
+                                <option value="@h.Value">@h.Text</option>
+                            }
+                        }
+                    </select>
+                    <small class="text-muted">Sayım seçilen hastanenin stoğuna işlenir. (Seçim hatırlanır)</small>
+                </div>
+            </div>
+
+            <p class="text-muted">
+                Barkodu okutun (el okuyucu ya da <b>Kamerayla Tara</b>), birim (Kutu / Test / Flakon) seçip miktarı girin ve <b>Listeye Ekle</b> deyin.
+                Tüm satırlar test cinsine çevrilip ürün bazında toplanır. En sonda <b>Sayımı Kaydet</b> ile tek seferde işlenir.
+            </p>
+
+            <!-- Giriş satırı -->
+            <div class="row g-2 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">Barkod / Referans</label>
+                    <input type="text" id="barcode" class="form-control" placeholder="Barkod okutun veya referans girin" />
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-primary w-100" onclick="fetchProduct()">Ürünü Getir</button>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Ürün</label>
+                    <input type="text" id="productName" class="form-control" readonly />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Lot</label>
+                    <input type="text" id="lotNumber" class="form-control" />
+                </div>
+            </div>
+
+            <!-- Kamerayla tarama -->
+            <div class="row g-2 mt-1">
+                <div class="col-md-4">
+                    <button type="button" class="btn btn-outline-primary w-100" id="btnScan" onclick="toggleScanner()">
+                        Kamerayla Tara
+                    </button>
+                </div>
+            </div>
+            <div id="scannerBox" class="mt-2" style="display:none; max-width:440px;">
+                <video id="scannerVideo" style="width:100%; border:1px solid #dee2e6; border-radius:8px; background:#000;" autoplay muted playsinline></video>
+                <div class="mt-1 d-flex gap-2 align-items-center">
+                    <select id="cameraSelect" class="form-select form-select-sm"></select>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="stopScanner()">Durdur</button>
+                </div>
+                <small id="scanStatus" class="text-muted d-block mt-1"></small>
+            </div>
+
+            <div class="row g-2 align-items-end mt-1">
+                <div class="col-md-3">
+                    <label class="form-label">Son Kullanma (SKT)</label>
+                    <input type="date" id="expiryDate" class="form-control" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Birim</label>
+                    <select id="unit" class="form-select">
+                        <option value="Kutu">Kutu</option>
+                        <option value="Flakon">Flakon</option>
+                        <option value="Test">Test</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Miktar</label>
+                    <input type="number" id="quantity" class="form-control" min="1" value="1" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">≈ Test</label>
+                    <input type="text" id="testPreview" class="form-control" readonly />
+                </div>
+                <div class="col-md-3">
+                    <button type="button" class="btn btn-success w-100" onclick="addLine()">Listeye Ekle</button>
+                </div>
+            </div>
+            <small id="unitHint" class="text-muted d-block mt-1"></small>
+
+            <hr class="my-4" />
+
+            <!-- Sayım listesi -->
+            <h5 class="fw-semibold">Sayım Listesi</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle" id="countTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ürün</th>
+                            <th>Referans</th>
+                            <th>Lot</th>
+                            <th>SKT</th>
+                            <th>Birim</th>
+                            <th class="text-end">Miktar</th>
+                            <th class="text-end">Test Karşılığı</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="countBody">
+                        <tr id="emptyRow"><td colspan="8" class="text-center text-muted">Henüz satır eklenmedi.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Ürün bazında toplam -->
+            <h6 class="fw-semibold mt-3">Ürün Bazında Toplam (Test)</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped" id="summaryTable">
+                    <thead><tr><th>Ürün</th><th class="text-end">Toplam Test</th></tr></thead>
+                    <tbody id="summaryBody"></tbody>
+                    <tfoot>
+                        <tr class="fw-bold">
+                            <td>GENEL TOPLAM</td>
+                            <td class="text-end" id="grandTotal">0</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <form asp-action="BarcodeCount" method="post" onsubmit="return prepareSubmit()">
+                <input type="hidden" id="hospitalIdField" name="hospitalId" value="" />
+                <input type="hidden" id="itemsJson" name="itemsJson" />
+                <button type="submit" class="btn btn-lg btn-success mt-2">Sayımı Kaydet</button>
+                <button type="button" class="btn btn-lg btn-outline-secondary mt-2" onclick="clearList()">Listeyi Temizle</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Kamerayla tarama kütüphanesi -->
+<script src="https://unpkg.com/@@zxing/library@0.19.1/umd/index.min.js"></script>
+
+<script>
+    const HOSPITAL_KEY = 'ozem_barcodeCount_hospital';
+    let lines = [];
+    let current = null; // {referenceNumber, productName, boxTextCount, flaconCountPerBox}
+
+    // Birim -> test dönüşümü
+    function toTests(quantity, unit, p) {
+        if (!p) return 0;
+        if (unit === "Kutu") return quantity * (p.boxTextCount || 0);
+        if (unit === "Flakon") {
+            if (!p.flaconCountPerBox || !p.boxTextCount) return 0;
+            return Math.round(quantity * p.boxTextCount / p.flaconCountPerBox);
+        }
+        return quantity; // Test
+    }
+
+    function updatePreview() {
+        const hint = document.getElementById('unitHint');
+        if (!current) { document.getElementById('testPreview').value = ""; hint.textContent = ""; return; }
+        const q = parseInt(document.getElementById('quantity').value) || 0;
+        const u = document.getElementById('unit').value;
+        document.getElementById('testPreview').value = toTests(q, u, current);
+
+        // Yardımcı bilgi: 1 flakon kaç test
+        if (current.boxTextCount > 0 && current.flaconCountPerBox > 0) {
+            const perFlacon = Math.round(current.boxTextCount / current.flaconCountPerBox);
+            hint.textContent = `1 kutu = ${current.boxTextCount} test = ${current.flaconCountPerBox} flakon · 1 flakon = ${perFlacon} test`;
+        } else {
+            hint.textContent = current.boxTextCount > 0 ? `1 kutu = ${current.boxTextCount} test` : "";
+        }
+    }
+
+    document.getElementById('unit').addEventListener('change', updatePreview);
+    document.getElementById('quantity').addEventListener('input', updatePreview);
+
+    function applyProduct(p, fromBarcode) {
+        current = {
+            referenceNumber: p.referenceNumber || "",
+            productName: p.productName || "",
+            boxTextCount: p.boxTextCount || 0,
+            flaconCountPerBox: p.flaconCountPerBox || 0
+        };
+        document.getElementById('productName').value = current.productName;
+        if (fromBarcode) {
+            document.getElementById('lotNumber').value = p.lotNumber || "";
+            document.getElementById('expiryDate').value = p.expiryIso || "";
+        } else {
+            document.getElementById('lotNumber').value = "";
+            document.getElementById('expiryDate').value = "";
+        }
+        updatePreview();
+        document.getElementById('quantity').focus();
+    }
+
+    async function fetchProduct() {
+        const input = document.getElementById('barcode').value.trim();
+        if (!input) { alert("Barkod / referans boş olamaz."); return; }
+
+        try {
+            let res = await fetch(`/Stock/GetProductDetailsByBarcode?barcode=${encodeURIComponent(input)}`);
+            let data = await res.json();
+            if (data.success) { applyProduct(data.product, true); return; }
+
+            res = await fetch(`/Stock/GetProductByReference?referenceNumber=${encodeURIComponent(input)}`);
+            data = await res.json();
+            if (data.success) { applyProduct(data.product, false); return; }
+
+            current = null;
+            document.getElementById('productName').value = "";
+            alert("Ürün bulunamadı. Barkodu ya da referans numarasını kontrol edin.");
+        } catch {
+            alert("Ürün bilgisi alınırken hata oluştu.");
+        }
+    }
+
+    function addLine() {
+        if (!current) { alert("Önce barkod okutup ürünü getirin."); return; }
+        const q = parseInt(document.getElementById('quantity').value) || 0;
+        if (q <= 0) { alert("Miktar 0'dan büyük olmalı."); return; }
+        const u = document.getElementById('unit').value;
+
+        if ((u === "Kutu" || u === "Flakon") && (!current.boxTextCount || current.boxTextCount <= 0)) {
+            alert("Bu ürün için 'Kutu Test Adedi' tanımlı değil; Test birimiyle girin veya ürünü güncelleyin.");
+            return;
+        }
+        if (u === "Flakon" && (!current.flaconCountPerBox || current.flaconCountPerBox <= 0)) {
+            alert("Bu ürün için 'Kutu Flakon Sayısı' tanımlı değil; Flakon girişi yapılamıyor.");
+            return;
+        }
+
+        lines.push({
+            referenceNumber: current.referenceNumber,
+            productName: current.productName,
+            lotNumber: document.getElementById('lotNumber').value.trim(),
+            expiryDate: document.getElementById('expiryDate').value || null,
+            unit: u,
+            quantity: q,
+            tests: toTests(q, u, current)
+        });
+
+        render();
+        document.getElementById('barcode').value = "";
+        document.getElementById('barcode').focus();
+    }
+
+    function removeLine(i) { lines.splice(i, 1); render(); }
+
+    function clearList() {
+        if (lines.length && !confirm("Liste temizlensin mi?")) return;
+        lines = []; render();
+    }
+
+    function render() {
+        const body = document.getElementById('countBody');
+        body.innerHTML = "";
+        if (lines.length === 0) {
+            body.innerHTML = '<tr id="emptyRow"><td colspan="8" class="text-center text-muted">Henüz satır eklenmedi.</td></tr>';
+        } else {
+            lines.forEach((l, i) => {
+                body.innerHTML += `<tr>
+                        <td>${l.productName}</td>
+                        <td>${l.referenceNumber}</td>
+                        <td>${l.lotNumber || ""}</td>
+                        <td>${l.expiryDate || "-"}</td>
+                        <td>${l.unit}</td>
+                        <td class="text-end">${l.quantity}</td>
+                        <td class="text-end">${l.tests}</td>
+                        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(${i})">Sil</button></td>
+                    </tr>`;
+            });
+        }
+
+        const totals = {};
+        let grand = 0;
+        lines.forEach(l => {
+            totals[l.productName] = (totals[l.productName] || 0) + l.tests;
+            grand += l.tests;
+        });
+        const sBody = document.getElementById('summaryBody');
+        sBody.innerHTML = "";
+        Object.keys(totals).forEach(name => {
+            sBody.innerHTML += `<tr><td>${name}</td><td class="text-end">${totals[name]}</td></tr>`;
+        });
+        document.getElementById('grandTotal').textContent = grand;
+    }
+
+    function prepareSubmit() {
+        if (lines.length === 0) { alert("Sayım listesi boş."); return false; }
+        const hid = document.getElementById('hospitalSelect').value;
+        if (!hid) { alert("Lütfen hastane seçin."); return false; }
+        document.getElementById('hospitalIdField').value = hid;
+        const payload = lines.map(l => ({
+            referenceNumber: l.referenceNumber,
+            quantity: l.quantity,
+            unit: l.unit,
+            lotNumber: l.lotNumber,
+            expiryDate: l.expiryDate
+        }));
+        document.getElementById('itemsJson').value = JSON.stringify(payload);
+        return true;
+    }
+
+    // ===== Hastane seçimini hatırla (kaydet sonrası sayfa yenilense de kalsın) =====
+    (function() {
+        const sel = document.getElementById('hospitalSelect');
+        const saved = localStorage.getItem(HOSPITAL_KEY);
+        if (saved && [...sel.options].some(o => o.value === saved)) {
+            sel.value = saved;
+        }
+        sel.addEventListener('change', () => localStorage.setItem(HOSPITAL_KEY, sel.value));
+    })();
+
+    // ===== Kamerayla tarama (ZXing) =====
+    let codeReader = null, activeStream = null, scanning = false;
+
+    function stopStream() {
+        if (activeStream) { activeStream.getTracks().forEach(t => t.stop()); activeStream = null; }
+        if (codeReader) { try { codeReader.reset(); } catch (e) { } }
+    }
+    function onDecode(result) {
+        if (result) {
+            document.getElementById('barcode').value = result.getText();
+            stopScanner();
+            fetchProduct();
+        }
+    }
+    async function startCamera(deviceId) {
+        const video = document.getElementById('scannerVideo');
+        const status = document.getElementById('scanStatus');
+        stopStream();
+        const constraints = deviceId ? { video: { deviceId: { exact: deviceId } } } : { video: { facingMode: { ideal: 'environment' } } };
+        activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = activeStream;
+        try { await video.play(); } catch (e) { }
+        codeReader = new ZXing.BrowserMultiFormatReader();
+        if (typeof codeReader.decodeFromStream === 'function') codeReader.decodeFromStream(activeStream, video, onDecode);
+        else codeReader.decodeFromVideoDevice(deviceId || null, video, onDecode);
+        status.textContent = 'Kamera açık — kodu çerçeveye getirin. (Siyahsa aşağıdan başka kamera seçin.)';
+    }
+    async function toggleScanner() {
+        if (scanning) { stopScanner(); return; }
+        const box = document.getElementById('scannerBox');
+        const status = document.getElementById('scanStatus');
+        box.style.display = 'block';
+        if (!window.isSecureContext) { status.textContent = 'Kamera için HTTPS ya da localhost gerekli.'; return; }
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { status.textContent = 'Tarayıcı kamera desteklemiyor.'; return; }
+        if (typeof ZXing === 'undefined') { status.textContent = 'Tarama kütüphanesi yüklenemedi (internet/CDN?).'; return; }
+        try {
+            scanning = true;
+            document.getElementById('btnScan').textContent = 'Taramayı Durdur';
+            status.textContent = 'Kamera izni isteniyor...';
+            await startCamera(null);
+            const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+            const sel = document.getElementById('cameraSelect');
+            sel.innerHTML = cams.map((d, i) => `<option value="${d.deviceId}">${d.label || ('Kamera ' + (i + 1))}</option>`).join('');
+            sel.onchange = () => startCamera(sel.value).catch(showCamError);
+        } catch (e) { showCamError(e); }
+    }
+    function showCamError(e) {
+        const status = document.getElementById('scanStatus');
+        const name = (e && (e.name || e.message)) ? (e.name || e.message) : String(e);
+        status.textContent = 'Kamera açılamadı: ' + name + ' — başka uygulama kullanıyor olabilir, kapak kapalı olabilir ya da izin reddedildi.';
+        scanning = false;
+        document.getElementById('btnScan').textContent = 'Kamerayla Tara';
+    }
+    function stopScanner() {
+        stopStream();
+        scanning = false;
+        const box = document.getElementById('scannerBox');
+        if (box) box.style.display = 'none';
+        const b = document.getElementById('btnScan');
+        if (b) b.textContent = 'Kamerayla Tara';
+    }
+</script>

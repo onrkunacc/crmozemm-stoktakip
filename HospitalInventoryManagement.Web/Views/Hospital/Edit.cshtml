@@ -1,0 +1,27 @@
+﻿@model HospitalInventoryManagement.Data.Models.Hospital
+@{
+    ViewData["Title"] = "Hastane Düzenle";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-5">
+            <div class="card">
+                <div class="card-body">
+                    <h4 class="fw-semibold mb-3">Hastane Düzenle</h4>
+                    <form asp-action="Edit" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.HospitalID" />
+                        <div class="mb-3">
+                            <label class="form-label">Hastane Adı</label>
+                            <input type="text" name="hospitalName" value="@Model.HospitalName" class="form-control" required />
+                        </div>
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                        <a asp-action="Index" class="btn btn-outline-secondary">Vazgeç</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

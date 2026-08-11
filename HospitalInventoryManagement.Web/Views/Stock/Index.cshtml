@@ -1,0 +1,299 @@
+﻿@using Microsoft.AspNetCore.Html
+@using X.PagedList
+@using X.PagedList.Mvc.Core
+@model IPagedList<HospitalInventoryManagement.Data.Models.Stock>
+
+@{
+    ViewData["Title"] = "Stok Listesi";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    int pageSize = (int)(ViewBag.PageSize ?? 20);
+    var now = DateTime.Now;
+    var soon = now.AddDays(60);
+    string curSort = ViewBag.SortOrder as string ?? "";
+
+    int Boxes(HospitalInventoryManagement.Data.Models.Stock s)
+        => (s.Product != null && s.Product.BoxTextCount > 0) ? s.TestCount / s.Product.BoxTextCount : 0;
+    int Rem(HospitalInventoryManagement.Data.Models.Stock s)
+        => (s.Product != null && s.Product.BoxTextCount > 0) ? s.TestCount % s.Product.BoxTextCount : s.TestCount;
+
+    // Tıklanabilir sıralama başlığı
+    Func<string, string, IHtmlContent> SortHeader = (key, title) =>
+    {
+        string next = curSort == key + "_asc" ? key + "_desc" : key + "_asc";
+        string arrow = curSort == key + "_asc" ? " ↑" : (curSort == key + "_desc" ? " ↓" : "");
+        string url = Url.Action("Index", new
+        {
+            sortOrder = next,
+            hospitalId = ViewBag.SelectedHospitalId,
+            searchQuery = (string)ViewBag.SearchQuery,
+            pageSize = pageSize
+        });
+        return new HtmlString($"<a class=\"sort-link\" href=\"{url}\">{System.Net.WebUtility.HtmlEncode(title)}<span class=\"sort-arrow\">{arrow}</span></a>");
+    };
+}
+
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-body">
+
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <h3 class="fw-semibold mb-0">Stok Listesi</h3>
+                <span class="badge bg-primary fs-6">Toplam @Model.TotalItemCount kayıt</span>
+            </div>
+
+            <!-- Filtre -->
+            <form method="get" asp-action="Index" class="mb-3" id="filterForm">
+                <input type="hidden" name="sortOrder" value="@curSort" />
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Hastane</label>
+                        <select name="hospitalId" class="form-select" asp-items="@((SelectList)ViewBag.Hospitals)" onchange="document.getElementById('filterForm').submit()">
+                            <option value="">Tüm Hastaneler</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Ürün Ara</label>
+                        <input type="text" name="searchQuery" value="@ViewBag.SearchQuery" class="form-control" placeholder="Ürün adı ile arayın">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Sayfa Başına</label>
+                        <select name="pageSize" class="form-select" onchange="document.getElementById('filterForm').submit()">
+                            @foreach (var size in new[] { 20, 50, 100 })
+                            {
+                                if (size == pageSize)
+                                {
+                                    <option value="@size" selected>@size</option>
+                                }
+                                else
+                                {
+                                    <option value="@size">@size</option>
+                                }
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">Ara</button>
+                    </div>
+                    <div class="col-md-1">
+                        <a asp-action="Index" class="btn btn-outline-secondary w-100">Temizle</a>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Dışa aktar -->
+            <div class="mb-3 d-flex gap-2 flex-wrap">
+                <a class="btn btn-success btn-sm"
+                   href="@Url.Action("Excel", "StockExport", new { hospitalId = ViewBag.SelectedHospitalId, searchQuery = (string)ViewBag.SearchQuery })">
+                    <i class="fas fa-file-excel"></i> Excel'e Aktar
+                </a>
+                <a class="btn btn-danger btn-sm"
+                   href="@Url.Action("Pdf", "StockExport", new { hospitalId = ViewBag.SelectedHospitalId, searchQuery = (string)ViewBag.SearchQuery })">
+                    <i class="fas fa-file-pdf"></i> PDF'e Aktar
+                </a>
+            </div>
+
+            @if (!Model.Any())
+            {
+                <p class="text-danger">Seçilen kriterlere uygun stok bulunamadı.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle stock-table mb-0">
+                        <thead>
+                            <tr>
+                                <th class="col-product">@SortHeader("name", "Ürün Adı")</th>
+                                <th>@SortHeader("category", "Kategori")</th>
+                                <th class="nowrap">@SortHeader("ref", "Referans")</th>
+                                <th class="nowrap">@SortHeader("lot", "Lot")</th>
+                                <th class="col-hospital">@SortHeader("hospital", "Hastane")</th>
+                                <th class="text-end nowrap">@SortHeader("test", "Test")</th>
+                                <th class="nowrap">Kutu / Test</th>
+                                <th class="text-end nowrap">Flakon</th>
+                                <th class="nowrap">@SortHeader("skt", "SKT")</th>
+                                <th class="nowrap">Durum</th>
+                                <th class="text-end nowrap">İşlemler</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in Model)
+                            {
+                                var expired = item.ExpiryDate.Date < now.Date;
+                                var expiring = !expired && item.ExpiryDate <= soon;
+                                var days = (item.ExpiryDate.Date - now.Date).Days;
+                                <tr class="@(expired ? "row-expired" : "")">
+                                    <td class="fw-semibold col-product">@item.Product?.ProductName</td>
+                                    <td class="text-muted small">@item.Product?.Category?.CategoryName</td>
+                                    <td class="nowrap">@item.Product?.ReferenceNumber</td>
+                                    <td class="nowrap">@item.LotNumber</td>
+                                    <td class="col-hospital small">@item.Hospital?.HospitalName</td>
+                                    <td class="text-end fw-semibold nowrap">@item.TestCount</td>
+                                    <td class="nowrap text-muted small">
+                                        @if (Boxes(item) > 0)
+                                        {
+                                            <text>@Boxes(item) kutu + @Rem(item) test</text>
+                                        }
+                                        else
+                                        {
+                                            <text>@item.TestCount test</text>
+                                        }
+                                    </td>
+                                    <td class="text-end nowrap">@item.FlaconCount</td>
+                                    <td class="nowrap @(expired ? "text-danger fw-semibold" : (expiring ? "text-warning fw-semibold" : ""))">
+                                        @item.ExpiryDate.ToString("dd.MM.yyyy")
+                                    </td>
+                                    <td class="nowrap">
+                                        @if (expired)
+                                        {
+                                            <span class="badge bg-danger">Miadı Geçti</span>
+                                        }
+                                        else if (expiring)
+                                        {
+                                            <span class="badge bg-warning text-dark">@days gün</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success-subtle text-success">Uygun</span>
+                                        }
+                                    </td>
+                                    <td class="text-end nowrap">
+                                        <div class="btn-group btn-group-sm">
+                                            <a asp-action="ManageFlacon" asp-route-id="@item.StockID" class="btn btn-outline-primary" title="Flakon"><i class="fas fa-vial"></i></a>
+                                            <a asp-action="Edit" asp-route-id="@item.StockID" class="btn btn-outline-warning" title="Düzenle"><i class="fas fa-pen"></i></a>
+                                            <a asp-action="Delete" asp-route-id="@item.StockID" class="btn btn-outline-danger" title="Sil"><i class="fas fa-trash"></i></a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-3">
+                    <span class="text-muted small">Sayfa @Model.PageNumber / @Model.PageCount</span>
+                    <div>
+                        @Html.PagedListPager(Model,
+                            page => Url.Action("Index", new { page, pageSize = pageSize, searchQuery = (string)ViewBag.SearchQuery, hospitalId = ViewBag.SelectedHospitalId, sortOrder = curSort }),
+                            new PagedListRenderOptions
+                            {
+                                DisplayLinkToPreviousPage = PagedListDisplayMode.Always,
+                                DisplayLinkToNextPage = PagedListDisplayMode.Always,
+                                DisplayLinkToFirstPage = PagedListDisplayMode.IfNeeded,
+                                DisplayLinkToLastPage = PagedListDisplayMode.IfNeeded,
+                                MaximumPageNumbersToDisplay = 5,
+                                Display = PagedListDisplayMode.IfNeeded,
+                                LinkToNextPageFormat = "Sonraki",
+                                LinkToPreviousPageFormat = "Önceki",
+                                LinkToFirstPageFormat = "«",
+                                LinkToLastPageFormat = "»"
+                            })
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .stock-table {
+        font-size: .86rem;
+    }
+
+        .stock-table thead th {
+            background: #f6f8fa;
+            border-bottom: 2px solid #e5e9ef;
+            white-space: nowrap;
+            font-weight: 600;
+            color: #4a5568;
+        }
+
+        .stock-table th, .stock-table td {
+            padding: .5rem .6rem !important;
+            vertical-align: middle;
+        }
+
+        .stock-table .nowrap {
+            white-space: nowrap;
+        }
+
+        .stock-table .col-product {
+            min-width: 160px;
+            max-width: 240px;
+        }
+
+        .stock-table .col-hospital {
+            min-width: 140px;
+            max-width: 200px;
+            line-height: 1.15;
+        }
+
+        .stock-table tbody tr.row-expired {
+            background-color: #fdecea;
+        }
+
+        .stock-table tbody tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        .stock-table .btn-group-sm > .btn {
+            padding: .2rem .5rem;
+        }
+
+    /* Sıralanabilir başlık */
+    .sort-link {
+        color: inherit;
+        text-decoration: none;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+    }
+
+        .sort-link:hover {
+            color: #0d6efd;
+        }
+
+    .sort-arrow {
+        color: #0d6efd;
+        font-weight: 700;
+        margin-left: 2px;
+    }
+
+    .pagination {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        padding-left: 0;
+        list-style: none;
+        margin: 0;
+    }
+
+        .pagination li {
+            display: inline-block;
+        }
+
+            .pagination li.active a {
+                font-weight: bold;
+                color: #fff;
+                background-color: #0d6efd;
+                border-color: #0d6efd;
+            }
+
+        .pagination a, .pagination span {
+            padding: 5px 10px;
+            text-decoration: none;
+            color: #0d6efd;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            display: inline-block;
+            font-size: .85rem;
+        }
+
+            .pagination a:hover {
+                background-color: #e9ecef;
+            }
+
+        .pagination .disabled a, .pagination .disabled span {
+            color: #adb5bd;
+            pointer-events: none;
+        }
+</style>

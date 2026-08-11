@@ -1,0 +1,179 @@
+﻿@model HomeViewModel
+@{
+    ViewData["Title"] = "Ana Sayfa";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    int Boxes(HospitalInventoryManagement.Data.Models.Stock s)
+        => (s.Product != null && s.Product.BoxTextCount > 0) ? s.TestCount / s.Product.BoxTextCount : 0;
+    int Rem(HospitalInventoryManagement.Data.Models.Stock s)
+        => (s.Product != null && s.Product.BoxTextCount > 0) ? s.TestCount % s.Product.BoxTextCount : s.TestCount;
+}
+
+<div class="container-fluid">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="fw-semibold mb-0">Ana Sayfa</h3>
+        <span class="badge bg-primary fs-6">@Model.HospitalName</span>
+    </div>
+
+    <!-- Özet kartlar -->
+    <div class="row">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-primary-subtle">
+                            <i class="ti ti-package fs-6 text-primary"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.TotalProducts</h4>
+                            <span class="text-muted">Ürün Çeşidi</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-success-subtle">
+                            <i class="ti ti-flask fs-6 text-success"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.TotalTests.ToString("N0")</h4>
+                            <span class="text-muted">Toplam Test (Stok)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-warning-subtle">
+                            <i class="ti ti-alert-triangle fs-6 text-warning"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.LowStockCount</h4>
+                            <span class="text-muted">Kutu Altı Ürün</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="card overflow-hidden">
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <span class="round-48 d-flex align-items-center justify-content-center rounded bg-danger-subtle">
+                            <i class="ti ti-calendar-time fs-6 text-danger"></i>
+                        </span>
+                        <div>
+                            <h4 class="fw-semibold mb-0">@Model.ExpiringSoonCount</h4>
+                            <span class="text-muted">SKT 60 Gün İçinde</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Test bazlı grafik -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title fw-semibold mb-1">Stok Durumu (Test Bazlı)</h5>
+                    <p class="text-muted mb-3">En yüksek test stoğuna sahip ürünler</p>
+                    @if (Model.StockData != null && Model.StockData.Any())
+                    {
+                        <canvas id="stockChart" height="120"></canvas>
+                    }
+                    else
+                    {
+                        <p class="text-muted">Gösterilecek stok verisi yok.</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Düşük stok listesi -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title fw-semibold mb-3">Stoğu Azalan Ürünler</h5>
+                    @if (Model.LowStockItems != null && Model.LowStockItems.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table align-middle mb-0">
+                                <tbody>
+                                    @foreach (var item in Model.LowStockItems)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <span class="fw-semibold d-block">@item.Product?.ProductName</span>
+                                                <small class="text-muted">
+                                                    @if (Boxes(item) > 0)
+                                                    {
+                                                        <text>@Boxes(item) kutu + @Rem(item) test</text>
+                                                    }
+                                                    else
+                                                    {
+                                                        <text>@item.TestCount test</text>
+                                                    }
+                                                </small>
+                                            </td>
+                                            <td class="text-end">
+                                                <span class="badge bg-warning-subtle text-warning">@item.TestCount test</span>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted mb-0">Kutu altına düşen ürün yok. 👍</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        (function () {
+        var stockData = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.StockData));
+        if (!stockData || stockData.length === 0) return;
+
+        var labels = stockData.map(function (s) { return s.ProductName; });
+        var data = stockData.map(function (s) { return s.TestCount; });
+
+        var ctx = document.getElementById('stockChart').getContext('2d');
+        new Chart(ctx, {
+        type: 'bar',
+        data: {
+        labels: labels,
+        datasets: [{
+        label: 'Test Stoğu',
+        data: data,
+        backgroundColor: 'rgba(93, 135, 255, 0.6)',
+        borderColor: 'rgba(93, 135, 255, 1)',
+        borderWidth: 1,
+        borderRadius: 4
+        }]
+        },
+        options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+        });
+        })();
+    </script>
+}
