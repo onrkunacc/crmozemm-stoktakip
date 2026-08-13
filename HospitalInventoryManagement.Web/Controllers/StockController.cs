@@ -597,8 +597,12 @@ namespace HospitalInventoryManagement.Web.Controllers
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Sayım hatası: {ex.Message}");
-                TempData["ErrorMessage"] = "Sayım kaydedilirken bir hata oluştu. Lütfen tekrar deneyin.";
+                // Gerçek kök nedeni bul (DbUpdateException ise asıl mesaj InnerException'da olur)
+                var root = ex;
+                while (root.InnerException != null) root = root.InnerException;
+
+                Console.WriteLine("SAYIM HATASI: " + ex.ToString()); // VS Output penceresinde tam stack
+                TempData["ErrorMessage"] = "Hata: " + root.Message;   // ekranda asıl mesaj
                 return RedirectToAction("BarcodeCount");
             }
         }

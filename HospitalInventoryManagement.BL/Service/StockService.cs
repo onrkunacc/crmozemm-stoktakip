@@ -184,83 +184,97 @@ namespace HospitalInventoryManagement.BL.Service
                 return result;
 
             var touchedProducts = new HashSet<int>();
+            // Bu batch içinde açılan yeni stokları hatırla (aynı ürün+lot ikinci kez gelirse)
+            var pending = new Dictionary<string, Stock>();
 
-            foreach (var line in lines)
+            using var tx = _context.Database.BeginTransaction();
+            try
             {
-                if (line == null || string.IsNullOrWhiteSpace(line.ReferenceNumber) || line.Quantity <= 0)
-                    continue;
-
-                var product = _context.Products
-                                      .FirstOrDefault(p => p.ReferenceNumber == line.ReferenceNumber);
-                if (product == null)
+                foreach (var line in lines)
                 {
-                    result.Warnings.Add($"Ürün bulunamadı: {line.ReferenceNumber}");
-                    continue;
-                }
+                    if (line == null || string.IsNullOrWhiteSpace(line.ReferenceNumber) || line.Quantity <= 0)
+                        continue;
 
-                if (product.BoxTextCount <= 0)
-                {
-                    result.Warnings.Add($"'{product.ProductName}' için Kutu Test Adedi tanımlı değil; satır atlandı.");
-                    continue;
-                }
-
-                int tests = UnitConverter.ToTests(line.Quantity, line.Unit, product);
-                if (tests <= 0) continue;
-
-                // ---- LOT BAZLI EŞLEŞME ----
-                // Aynı ürün + hastane + lot varsa ona ekle; yoksa YENİ satır aç.
-                // null ve boş lot aynı kova sayılır.
-                var lot = (line.LotNumber ?? "").Trim();
-
-                var stock = _context.Stocks.FirstOrDefault(s =>
-                    s.ProductID == product.ProductID &&
-                    s.HospitalID == hospitalId &&
-                    (s.LotNumber ?? "") == lot);
-
-                if (stock == null)
-                {
-                    stock = new Stock
+                    var product = _context.Products
+                                          .FirstOrDefault(p => p.ReferenceNumber == line.ReferenceNumber);
+                    if (product == null)
                     {
-                        ProductID = product.ProductID,
-                        HospitalID = hospitalId,
-                        TestCount = tests,
-                        LotNumber = string.IsNullOrEmpty(lot) ? null : lot,
-                        ExpiryDate = line.ExpiryDate ?? DateTime.Now,
-                        LastUpdated = DateTime.Now
-                    };
-                    SyncDerived(stock, product);
-                    _context.Stocks.Add(stock);
-                    _context.SaveChanges(); // StockID üretilsin (transaction FK'si için)
-                }
-                else
-                {
+                        result.Warnings.Add($"Ürün bulunamadı: {line.ReferenceNumber}");
+                        continue;
+                    }
+                    if (product.BoxTextCount <= 0)
+                    {
+                        result.Warnings.Add($"'{product.ProductName}' için Kutu Test Adedi tanımlı değil; satır atlandı.");
+                        continue;
+                    }
+
+                    int tests = UnitConverter.ToTests(line.Quantity, line.Unit, product);
+                    if (tests <= 0) continue;
+
+                    var lot = (line.LotNumber ?? "").Trim();
+                    string key = product.ProductID + "|" + lot;
+
+                    // 1) Bu batch'te az önce açtıysak onu kullan
+                    Stock stock;
+                    if (!pending.TryGetValue(key, out stock))
+                    {
+                        // 2) DB'de ürün+hastane+lot var mı?
+                        stock = _context.Stocks.FirstOrDefault(s =>
+                            s.ProductID == product.ProductID &&
+                            s.HospitalID == hospitalId &&
+                            (s.LotNumber ?? "") == lot);
+
+                        if (stock == null)
+                        {
+                            // 3) Yoksa yeni satır aç (henüz SaveChanges yok)
+                            stock = new Stock
+                            {
+                                ProductID = product.ProductID,
+                                HospitalID = hospitalId,
+                                TestCount = 0,
+                                LotNumber = string.IsNullOrEmpty(lot) ? null : lot,
+                                ExpiryDate = line.ExpiryDate ?? DateTime.Now,
+                                LastUpdated = DateTime.Now
+                            };
+                            _context.Stocks.Add(stock);
+                        }
+                        pending[key] = stock;
+                    }
+
                     stock.TestCount += tests;
-                    // Lot AYNI olduğu için lot'u EZMİYORUZ. Sadece miat güncelle (varsa).
                     if (line.ExpiryDate.HasValue) stock.ExpiryDate = line.ExpiryDate.Value;
                     stock.LastUpdated = DateTime.Now;
                     SyncDerived(stock, product);
+
+                    // İşlem kaydı: Stock'a NAVIGATION ile bağlı -> StockID otomatik dolar
+                    _context.StockTransactions.Add(new StockTransaction
+                    {
+                        Stock = stock,
+                        ChangeQuantity = line.Quantity,
+                        QuantityInTests = tests,
+                        Unit = line.Unit,
+                        TransactionDate = DateTime.Now,
+                        TransactionType = "Giriş",
+                        LotNumber = lot,                 // boş string olabilir, null değil
+                        Description = "Barkod sayımı ile giriş",
+                        UserId = userId,
+                        HospitalID = hospitalId
+                    });
+
+                    result.LineCount++;
+                    result.TotalTests += tests;
+                    touchedProducts.Add(product.ProductID);
                 }
 
-                _context.StockTransactions.Add(new StockTransaction
-                {
-                    StockID = stock.StockID,
-                    ChangeQuantity = line.Quantity,       // operatörün girdiği ham miktar
-                    QuantityInTests = tests,              // teste normalize
-                    Unit = line.Unit,
-                    TransactionDate = DateTime.Now,
-                    TransactionType = "Giriş",
-                    LotNumber = string.IsNullOrEmpty(lot) ? null : lot,
-                    Description = "Barkod sayımı ile giriş",
-                    UserId = userId,
-                    HospitalID = hospitalId
-                });
-
-                result.LineCount++;
-                result.TotalTests += tests;
-                touchedProducts.Add(product.ProductID);
+                _context.SaveChanges(); // TEK sefer: tüm stoklar + işlem kayıtları
+                tx.Commit();
+            }
+            catch
+            {
+                tx.Rollback();
+                throw; // gerçek hata controller'daki catch'e gider
             }
 
-            _context.SaveChanges();
             result.ProductCount = touchedProducts.Count;
             return result;
         }
