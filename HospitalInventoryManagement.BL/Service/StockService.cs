@@ -190,6 +190,9 @@ namespace HospitalInventoryManagement.BL.Service
             using var tx = _context.Database.BeginTransaction();
             try
             {
+                // Bu hastanenin AKTİF sayımı (yoksa Sayım #1 açılır). Satırlar bu sayıma yazılır.
+                var sayim = GetOrCreateActiveSayim(hospitalId, userId);
+
                 foreach (var line in lines)
                 {
                     if (line == null || string.IsNullOrWhiteSpace(line.ReferenceNumber) || line.Quantity <= 0)
@@ -218,19 +221,20 @@ namespace HospitalInventoryManagement.BL.Service
                     Stock stock;
                     if (!pending.TryGetValue(key, out stock))
                     {
-                        // 2) DB'de ürün+hastane+lot var mı?
+                        // 2) Bu SAYIMDA ürün+lot var mı? (aktif sayıma bağlı)
                         stock = _context.Stocks.FirstOrDefault(s =>
+                            s.SayimID == sayim.SayimID &&
                             s.ProductID == product.ProductID &&
-                            s.HospitalID == hospitalId &&
                             (s.LotNumber ?? "") == lot);
 
                         if (stock == null)
                         {
-                            // 3) Yoksa yeni satır aç (henüz SaveChanges yok)
+                            // 3) Yoksa bu sayımda yeni satır aç (henüz SaveChanges yok)
                             stock = new Stock
                             {
                                 ProductID = product.ProductID,
                                 HospitalID = hospitalId,
+                                SayimID = sayim.SayimID,
                                 TestCount = 0,
                                 LotNumber = string.IsNullOrEmpty(lot) ? null : lot,
                                 ExpiryDate = line.ExpiryDate ?? DateTime.Now,
@@ -278,6 +282,54 @@ namespace HospitalInventoryManagement.BL.Service
             result.ProductCount = touchedProducts.Count;
             return result;
         }
+        // ---- Sayım Dönemi (oturum) ----
+
+        // Hastanenin açık/aktif sayımı (yoksa null)
+        public Sayim GetActiveSayim(int hospitalId)
+        {
+            return _context.Sayims.FirstOrDefault(z => z.HospitalID == hospitalId && z.IsActive);
+        }
+
+        // Aktif sayım yoksa Sayım #1 açar
+        public Sayim GetOrCreateActiveSayim(int hospitalId, string userId)
+        {
+            var active = _context.Sayims.FirstOrDefault(z => z.HospitalID == hospitalId && z.IsActive);
+            if (active != null) return active;
+
+            int nextNo = (_context.Sayims.Where(z => z.HospitalID == hospitalId).Max(z => (int?)z.SayimNo) ?? 0) + 1;
+            active = new Sayim
+            {
+                HospitalID = hospitalId,
+                SayimNo = nextNo,
+                CreatedDate = DateTime.Now,
+                CreatedByUserId = userId,
+                IsActive = true
+            };
+            _context.Sayims.Add(active);
+            _context.SaveChanges();
+            return active;
+        }
+
+        // Yeni sayım başlat: mevcut aktif(ler)i kapat, No+1 ile yeni aktif aç
+        public Sayim StartNewSayim(int hospitalId, string userId)
+        {
+            var actives = _context.Sayims.Where(z => z.HospitalID == hospitalId && z.IsActive).ToList();
+            foreach (var a in actives) { a.IsActive = false; a.ClosedDate = DateTime.Now; }
+
+            int nextNo = (_context.Sayims.Where(z => z.HospitalID == hospitalId).Max(z => (int?)z.SayimNo) ?? 0) + 1;
+            var yeni = new Sayim
+            {
+                HospitalID = hospitalId,
+                SayimNo = nextNo,
+                CreatedDate = DateTime.Now,
+                CreatedByUserId = userId,
+                IsActive = true
+            };
+            _context.Sayims.Add(yeni);
+            _context.SaveChanges();
+            return yeni;
+        }
+
         // TestCount tek doğruluk kaynağı; Quantity (kutu) ve FlaconCount ondan türetilir.
         private void SyncDerived(Stock stock, Product product)
         {
@@ -292,8 +344,11 @@ namespace HospitalInventoryManagement.BL.Service
 
         public int GetTestCount(string referenceNumber, int hospitalId)
         {
+            var sayim = GetActiveSayim(hospitalId);
+            if (sayim == null) return 0;
+
             return _context.Stocks
-                .Where(s => s.Product.ReferenceNumber == referenceNumber && s.HospitalID == hospitalId)
+                .Where(s => s.SayimID == sayim.SayimID && s.Product.ReferenceNumber == referenceNumber)
                 .Select(s => (int?)s.TestCount)
                 .FirstOrDefault() ?? 0;
         }
@@ -341,8 +396,10 @@ namespace HospitalInventoryManagement.BL.Service
                 return result;
             }
 
-            var sourceStock = _context.Stocks
-                .FirstOrDefault(s => s.ProductID == product.ProductID && s.HospitalID == sourceHospitalId);
+            // Kaynak: hastanenin AKTİF sayımındaki stok
+            var srcSayim = GetActiveSayim(sourceHospitalId);
+            var sourceStock = srcSayim == null ? null : _context.Stocks
+                .FirstOrDefault(s => s.SayimID == srcSayim.SayimID && s.ProductID == product.ProductID);
 
             if (sourceStock == null || sourceStock.TestCount < tests)
             {
@@ -359,9 +416,10 @@ namespace HospitalInventoryManagement.BL.Service
                 sourceStock.LastUpdated = DateTime.Now;
                 SyncDerived(sourceStock, product);
 
-                // Hedefe ekle (yoksa oluştur)
+                // Hedef: hedefin AKTİF sayımına ekle (yoksa oluştur)
+                var dstSayim = GetOrCreateActiveSayim(destinationHospitalId, userId);
                 var destStock = _context.Stocks
-                    .FirstOrDefault(s => s.ProductID == product.ProductID && s.HospitalID == destinationHospitalId);
+                    .FirstOrDefault(s => s.SayimID == dstSayim.SayimID && s.ProductID == product.ProductID);
 
                 if (destStock == null)
                 {
@@ -369,6 +427,7 @@ namespace HospitalInventoryManagement.BL.Service
                     {
                         ProductID = product.ProductID,
                         HospitalID = destinationHospitalId,
+                        SayimID = dstSayim.SayimID,
                         TestCount = tests,
                         LotNumber = sourceStock.LotNumber,
                         ExpiryDate = sourceStock.ExpiryDate,

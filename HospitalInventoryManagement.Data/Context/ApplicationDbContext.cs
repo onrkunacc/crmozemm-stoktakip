@@ -21,6 +21,7 @@ namespace HospitalInventoryManagement.Data.Context
         public DbSet<TestTemplate> TestTemplates { get; set; }
         public DbSet<ProductRequest> ProductRequests { get; set; }
         public DbSet<ErrorLogs> ErrorLogs { get; set; }
+        public DbSet<Sayim> Sayims { get; set; }
 
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
             : base(options)
@@ -117,6 +118,20 @@ namespace HospitalInventoryManagement.Data.Context
                 .HasOne<ApplicationUser>()
                 .WithMany()
                 .HasForeignKey(st => st.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Sayım dönemi (Sayim) <--> Hastane : Restrict (çoklu cascade yolunu önlemek için)
+            builder.Entity<Sayim>()
+                .HasOne(z => z.Hospital)
+                .WithMany()
+                .HasForeignKey(z => z.HospitalID)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // Stok <--> Sayım : Restrict (sayım silinse bile stok satırı silinmez)
+            builder.Entity<Stock>()
+                .HasOne(s => s.Sayim)
+                .WithMany(z => z.Stocks)
+                .HasForeignKey(s => s.SayimID)
                 .OnDelete(DeleteBehavior.Restrict);
 
         }

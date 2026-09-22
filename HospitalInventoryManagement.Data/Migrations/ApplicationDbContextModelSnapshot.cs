@@ -95,9 +95,9 @@ namespace HospitalInventoryManagement.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = "c39a8c28-9d21-42d7-945e-8a5f55967477",
+                            Id = "35a59781-c48e-4c62-b652-4be35a69175c",
                             AccessFailedCount = 0,
-                            ConcurrencyStamp = "89206c6d-15bf-4e85-bba3-f5d26d21a3d9",
+                            ConcurrencyStamp = "14918742-b21e-4e00-bb82-b53be3908010",
                             Email = "admin@ozemmedikal.com",
                             EmailConfirmed = true,
                             HospitalID = 0,
@@ -105,9 +105,9 @@ namespace HospitalInventoryManagement.Data.Migrations
                             LockoutEnabled = false,
                             NormalizedEmail = "ADMIN@OZEMEDIKAL.COM",
                             NormalizedUserName = "ADMIN@OZEMMEDIKAL.COM",
-                            PasswordHash = "AQAAAAIAAYagAAAAEHpabviKYDYMT+CbHUnuoCXkWkEGAzoGSWIrsbJ/6NpFCARqfz649BbzoH6WKjrUxQ==",
+                            PasswordHash = "AQAAAAIAAYagAAAAEM7J4SLhwpDSyZtPjHXCgI2nzi8h1ktzMERdtFqSxK1XXYc661WVu9ipuE9v6YYK2A==",
                             PhoneNumberConfirmed = false,
-                            SecurityStamp = "4b8591d0-0300-484a-ba57-d81e948b9673",
+                            SecurityStamp = "904feabf-d9f3-4828-bc13-2694907e73b1",
                             TwoFactorEnabled = false,
                             UserName = "admin"
                         });
@@ -356,6 +356,42 @@ namespace HospitalInventoryManagement.Data.Migrations
                     b.ToTable("ProductTypes");
                 });
 
+            modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Sayim", b =>
+                {
+                    b.Property<int>("SayimID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SayimID"));
+
+                    b.Property<DateTime?>("ClosedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDate")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("HospitalID")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("SayimNo")
+                        .HasColumnType("int");
+
+                    b.HasKey("SayimID");
+
+                    b.HasIndex("HospitalID");
+
+                    b.ToTable("Sayims");
+                });
+
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Stock", b =>
                 {
                     b.Property<int>("StockID")
@@ -385,6 +421,9 @@ namespace HospitalInventoryManagement.Data.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("int");
 
+                    b.Property<int?>("SayimID")
+                        .HasColumnType("int");
+
                     b.Property<int>("TestCount")
                         .HasColumnType("int");
 
@@ -393,6 +432,8 @@ namespace HospitalInventoryManagement.Data.Migrations
                     b.HasIndex("HospitalID");
 
                     b.HasIndex("ProductID");
+
+                    b.HasIndex("SayimID");
 
                     b.ToTable("Stocks");
                 });
@@ -504,13 +545,13 @@ namespace HospitalInventoryManagement.Data.Migrations
                     b.HasData(
                         new
                         {
-                            Id = "c28db181-1406-410e-ae37-a2e97d3b231d",
+                            Id = "0932a917-e2c8-4456-9def-7ac0940b5112",
                             Name = "Admin",
                             NormalizedName = "ADMIN"
                         },
                         new
                         {
-                            Id = "fb131caa-460c-4611-a372-f524af05164d",
+                            Id = "e495c3e6-7e49-4bd9-8a57-ef776053453a",
                             Name = "User",
                             NormalizedName = "USER"
                         });
@@ -605,8 +646,8 @@ namespace HospitalInventoryManagement.Data.Migrations
                     b.HasData(
                         new
                         {
-                            UserId = "c39a8c28-9d21-42d7-945e-8a5f55967477",
-                            RoleId = "c28db181-1406-410e-ae37-a2e97d3b231d"
+                            UserId = "35a59781-c48e-4c62-b652-4be35a69175c",
+                            RoleId = "0932a917-e2c8-4456-9def-7ac0940b5112"
                         });
                 });
 
@@ -695,6 +736,17 @@ namespace HospitalInventoryManagement.Data.Migrations
                     b.Navigation("RequestedByUser");
                 });
 
+            modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Sayim", b =>
+                {
+                    b.HasOne("HospitalInventoryManagement.Data.Models.Hospital", "Hospital")
+                        .WithMany()
+                        .HasForeignKey("HospitalID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Hospital");
+                });
+
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Stock", b =>
                 {
                     b.HasOne("HospitalInventoryManagement.Data.Models.Hospital", "Hospital")
@@ -709,9 +761,16 @@ namespace HospitalInventoryManagement.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("HospitalInventoryManagement.Data.Models.Sayim", "Sayim")
+                        .WithMany("Stocks")
+                        .HasForeignKey("SayimID")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Hospital");
 
                     b.Navigation("Product");
+
+                    b.Navigation("Sayim");
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.StockTransaction", b =>
@@ -815,6 +874,11 @@ namespace HospitalInventoryManagement.Data.Migrations
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.ProductType", b =>
                 {
                     b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Sayim", b =>
+                {
+                    b.Navigation("Stocks");
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Stock", b =>

@@ -22,6 +22,11 @@ namespace HospitalInventoryManagement.Data.Models
         // Temel (base) birim: teste normalize edilmiş gerçek stok. Tek doğruluk kaynağı budur.
         // Quantity (kutu) ve FlaconCount bu değerden türetilip senkron tutulur.
         public int TestCount { get; set; }
+
+        // Ait olduğu sayım dönemi (aktif sayım = güncel stok)
+        public int? SayimID { get; set; }
+        public Sayim Sayim { get; set; }
+
         public Hospital Hospital { get; set; }
         public Product Product { get; set; }
         public ICollection<StockTransaction> StockTransactions { get; set; }

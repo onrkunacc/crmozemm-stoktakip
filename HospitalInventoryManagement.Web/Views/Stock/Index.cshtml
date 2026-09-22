@@ -16,7 +16,6 @@
     int Rem(HospitalInventoryManagement.Data.Models.Stock s)
         => (s.Product != null && s.Product.BoxTextCount > 0) ? s.TestCount % s.Product.BoxTextCount : s.TestCount;
 
-    // Tıklanabilir sıralama başlığı
     Func<string, string, IHtmlContent> SortHeader = (key, title) =>
     {
         string next = curSort == key + "_asc" ? key + "_desc" : key + "_asc";
@@ -26,7 +25,8 @@
             sortOrder = next,
             hospitalId = ViewBag.SelectedHospitalId,
             searchQuery = (string)ViewBag.SearchQuery,
-            pageSize = pageSize
+            pageSize = pageSize,
+            sayimNo = ViewBag.SayimNo
         });
         return new HtmlString($"<a class=\"sort-link\" href=\"{url}\">{System.Net.WebUtility.HtmlEncode(title)}<span class=\"sort-arrow\">{arrow}</span></a>");
     };
@@ -51,9 +51,26 @@
                             <option value="">Tüm Hastaneler</option>
                         </select>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label">Ürün Ara</label>
                         <input type="text" name="searchQuery" value="@ViewBag.SearchQuery" class="form-control" placeholder="Ürün adı ile arayın">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Sayım</label>
+                        <select name="sayimNo" class="form-select" onchange="document.getElementById('filterForm').submit()">
+                            <option value="">Güncel (Aktif)</option>
+                            @foreach (var n in (ViewBag.SayimNos as List<int> ?? new List<int>()))
+                            {
+                                if (ViewBag.SayimNo != null && (int)ViewBag.SayimNo == n)
+                                {
+                                    <option value="@n" selected>Sayım #@n</option>
+                                }
+                                else
+                                {
+                                    <option value="@n">Sayım #@n</option>
+                                }
+                            }
+                        </select>
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">Sayfa Başına</label>
@@ -71,7 +88,7 @@
                             }
                         </select>
                     </div>
-                    <div class="col-md-2">
+                    <div class="col-md-1">
                         <button type="submit" class="btn btn-primary w-100">Ara</button>
                     </div>
                     <div class="col-md-1">
@@ -92,6 +109,22 @@
                 </a>
             </div>
 
+            @if (ViewBag.SonSayimNo != null)
+            {
+                <div class="alert alert-light border py-2 mb-3">
+                    <i class="fas fa-clock-rotate-left text-primary"></i>
+                    Bu hastanenin en son sayımı: <b>#@ViewBag.SonSayimNo</b> · @ViewBag.SonSayimTarih
+                    @if (ViewBag.SayimNo != null && (int)ViewBag.SayimNo > 0)
+                    {
+                        <span class="text-muted">— şu an <b>Sayım #@ViewBag.SayimNo</b> gösteriliyor.</span>
+                    }
+                    else
+                    {
+                        <span class="text-muted">— güncel (aktif) sayım gösteriliyor.</span>
+                    }
+                </div>
+            }
+
             @if (!Model.Any())
             {
                 <p class="text-danger">Seçilen kriterlere uygun stok bulunamadı.</p>
@@ -102,16 +135,15 @@
                     <table class="table table-hover align-middle stock-table mb-0">
                         <thead>
                             <tr>
-                                <th class="col-product">@SortHeader("name", "Ürün Adı")</th>
-                                <th>@SortHeader("category", "Kategori")</th>
+                                <th class="col-product">@SortHeader("name", "Ürün")</th>
                                 <th class="nowrap">@SortHeader("ref", "Referans")</th>
                                 <th class="nowrap">@SortHeader("lot", "Lot")</th>
                                 <th class="col-hospital">@SortHeader("hospital", "Hastane")</th>
-                                <th class="text-end nowrap">@SortHeader("test", "Test")</th>
-                                <th class="nowrap">Kutu / Test</th>
-                                <th class="text-end nowrap">Flakon</th>
+                                <th class="nowrap">@SortHeader("test", "Stok")</th>
                                 <th class="nowrap">@SortHeader("skt", "SKT")</th>
                                 <th class="nowrap">Durum</th>
+                                <th class="nowrap">@SortHeader("updated", "Güncelleme")</th>
+                                <th class="nowrap">Sayım</th>
                                 <th class="text-end nowrap">İşlemler</th>
                             </tr>
                         </thead>
@@ -122,23 +154,26 @@
                                 var expiring = !expired && item.ExpiryDate <= soon;
                                 var days = (item.ExpiryDate.Date - now.Date).Days;
                                 <tr class="@(expired ? "row-expired" : "")">
-                                    <td class="fw-semibold col-product">@item.Product?.ProductName</td>
-                                    <td class="text-muted small">@item.Product?.Category?.CategoryName</td>
+                                    <td class="col-product">
+                                        <span class="fw-semibold d-block">@item.Product?.ProductName</span>
+                                        <span class="text-muted xsmall">@item.Product?.Category?.CategoryName</span>
+                                    </td>
                                     <td class="nowrap">@item.Product?.ReferenceNumber</td>
                                     <td class="nowrap">@item.LotNumber</td>
-                                    <td class="col-hospital small">@item.Hospital?.HospitalName</td>
-                                    <td class="text-end fw-semibold nowrap">@item.TestCount</td>
-                                    <td class="nowrap text-muted small">
-                                        @if (Boxes(item) > 0)
-                                        {
-                                            <text>@Boxes(item) kutu + @Rem(item) test</text>
-                                        }
-                                        else
-                                        {
-                                            <text>@item.TestCount test</text>
-                                        }
+                                    <td class="col-hospital xsmall">@item.Hospital?.HospitalName</td>
+                                    <td class="nowrap">
+                                        <span class="fw-semibold">@item.TestCount</span> <span class="text-muted xsmall">test</span>
+                                        <span class="text-muted xsmall d-block">
+                                            @if (Boxes(item) > 0)
+                                            {
+                                                <text>@Boxes(item) kutu + @Rem(item) · @item.FlaconCount flk</text>
+                                            }
+                                            else
+                                            {
+                                                <text>@item.FlaconCount flk</text>
+                                            }
+                                        </span>
                                     </td>
-                                    <td class="text-end nowrap">@item.FlaconCount</td>
                                     <td class="nowrap @(expired ? "text-danger fw-semibold" : (expiring ? "text-warning fw-semibold" : ""))">
                                         @item.ExpiryDate.ToString("dd.MM.yyyy")
                                     </td>
@@ -154,6 +189,17 @@
                                         else
                                         {
                                             <span class="badge bg-success-subtle text-success">Uygun</span>
+                                        }
+                                    </td>
+                                    <td class="nowrap text-muted xsmall">@item.LastUpdated.ToString("dd.MM.yyyy HH:mm")</td>
+                                    <td class="nowrap">
+                                        @if (item.Sayim != null)
+                                        {
+                                            <span>#@item.Sayim.SayimNo</span>
+                                            if (item.Sayim.IsActive)
+                                            {
+                                                <span class="badge bg-primary ms-1" style="font-size:.62rem;">Aktif</span>
+                                            }
                                         }
                                     </td>
                                     <td class="text-end nowrap">
@@ -173,7 +219,7 @@
                     <span class="text-muted small">Sayfa @Model.PageNumber / @Model.PageCount</span>
                     <div>
                         @Html.PagedListPager(Model,
-                            page => Url.Action("Index", new { page, pageSize = pageSize, searchQuery = (string)ViewBag.SearchQuery, hospitalId = ViewBag.SelectedHospitalId, sortOrder = curSort }),
+                            page => Url.Action("Index", new { page, pageSize = pageSize, searchQuery = (string)ViewBag.SearchQuery, hospitalId = ViewBag.SelectedHospitalId, sortOrder = curSort, sayimNo = ViewBag.SayimNo }),
                             new PagedListRenderOptions
                             {
                                 DisplayLinkToPreviousPage = PagedListDisplayMode.Always,
@@ -196,7 +242,7 @@
 
 <style>
     .stock-table {
-        font-size: .86rem;
+        font-size: .82rem;
     }
 
         .stock-table thead th {
@@ -208,7 +254,7 @@
         }
 
         .stock-table th, .stock-table td {
-            padding: .5rem .6rem !important;
+            padding: .4rem .55rem !important;
             vertical-align: middle;
         }
 
@@ -216,15 +262,22 @@
             white-space: nowrap;
         }
 
+        .stock-table .xsmall {
+            font-size: .74rem;
+            line-height: 1.1;
+        }
+
         .stock-table .col-product {
-            min-width: 160px;
-            max-width: 240px;
+            min-width: 150px;
+            max-width: 230px;
+            line-height: 1.15;
         }
 
         .stock-table .col-hospital {
-            min-width: 140px;
-            max-width: 200px;
-            line-height: 1.15;
+            min-width: 120px;
+            max-width: 170px;
+            line-height: 1.1;
+            white-space: normal;
         }
 
         .stock-table tbody tr.row-expired {
@@ -236,10 +289,9 @@
         }
 
         .stock-table .btn-group-sm > .btn {
-            padding: .2rem .5rem;
+            padding: .18rem .45rem;
         }
 
-    /* Sıralanabilir başlık */
     .sort-link {
         color: inherit;
         text-decoration: none;

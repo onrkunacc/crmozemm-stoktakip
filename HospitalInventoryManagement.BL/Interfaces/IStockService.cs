@@ -32,5 +32,9 @@ namespace HospitalInventoryManagement.BL.Interfaces
 
         // Bir hastanedeki bir ürünün mevcut test miktarı (aktarım ekranında gösterim için).
         int GetTestCount(string referenceNumber, int hospitalId);
+        Sayim GetActiveSayim(int hospitalId);
+        Sayim StartNewSayim(int hospitalId, string userId);
+        Sayim GetOrCreateActiveSayim(int hospitalId, string userId);
+
     }
 }

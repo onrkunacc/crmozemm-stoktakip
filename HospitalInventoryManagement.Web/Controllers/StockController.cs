@@ -32,7 +32,7 @@ namespace HospitalInventoryManagement.Web.Controllers
         // (Yalnızca Index değişiyor; sortOrder parametresi ve sıralama eklendi.)
         // ================================================================
 
-        public async Task<IActionResult> Index(string searchQuery, int? hospitalId, int page = 1, int pageSize = 20, string sortOrder = null)
+        public async Task<IActionResult> Index(string searchQuery, int? hospitalId, int? sayimNo, int page = 1, int pageSize = 20, string sortOrder = null)
         {
             try
             {
@@ -50,6 +50,7 @@ namespace HospitalInventoryManagement.Web.Controllers
                         .Include(s => s.Product.ProductType)
                         .Include(s => s.Product.Platform)
                         .Include(s => s.Hospital)
+                        .Include(s => s.Sayim)
                         .AsQueryable();
 
                 if (hospitalId.HasValue && hospitalId.Value > 0)
@@ -61,6 +62,12 @@ namespace HospitalInventoryManagement.Web.Controllers
                 {
                     stocksQuery = stocksQuery.Where(s => s.Product.ProductName.Contains(searchQuery));
                 }
+
+                // Sayım filtresi: seçilen sayım numarası; yoksa güncel (aktif) sayım
+                if (sayimNo.HasValue && sayimNo.Value > 0)
+                    stocksQuery = stocksQuery.Where(s => s.Sayim.SayimNo == sayimNo.Value);
+                else
+                    stocksQuery = stocksQuery.Where(s => s.Sayim.IsActive);
 
                 // Sıralama (başlık tıklamalarından gelir)
                 stocksQuery = sortOrder switch
@@ -79,6 +86,8 @@ namespace HospitalInventoryManagement.Web.Controllers
                     "test_desc" => stocksQuery.OrderByDescending(s => s.TestCount),
                     "skt_asc" => stocksQuery.OrderBy(s => s.ExpiryDate),
                     "skt_desc" => stocksQuery.OrderByDescending(s => s.ExpiryDate),
+                    "updated_asc" => stocksQuery.OrderBy(s => s.LastUpdated),
+                    "updated_desc" => stocksQuery.OrderByDescending(s => s.LastUpdated),
                     _ => stocksQuery.OrderBy(s => s.Hospital.HospitalName).ThenBy(s => s.Product.ProductName)
                 };
 
@@ -88,6 +97,25 @@ namespace HospitalInventoryManagement.Web.Controllers
                 ViewBag.SelectedHospitalId = hospitalId;
                 ViewBag.PageSize = pageSize;
                 ViewBag.SortOrder = sortOrder;
+                ViewBag.SayimNo = sayimNo;
+
+                var sayimQuery = _context.Sayims.AsQueryable();
+                if (hospitalId.HasValue && hospitalId.Value > 0)
+                    sayimQuery = sayimQuery.Where(z => z.HospitalID == hospitalId.Value);
+                ViewBag.SayimNos = sayimQuery.Select(z => z.SayimNo).Distinct().OrderBy(n => n).ToList();
+
+                if (hospitalId.HasValue && hospitalId.Value > 0)
+                {
+                    var sonSayim = _context.Sayims
+                        .Where(z => z.HospitalID == hospitalId.Value)
+                        .OrderByDescending(z => z.SayimNo)
+                        .FirstOrDefault();
+                    if (sonSayim != null)
+                    {
+                        ViewBag.SonSayimNo = sonSayim.SayimNo;
+                        ViewBag.SonSayimTarih = sonSayim.CreatedDate.ToString("dd.MM.yyyy HH:mm");
+                    }
+                }
                 ViewBag.Hospitals = new SelectList(
                     _context.Hospitals.OrderBy(h => h.HospitalName), "HospitalID", "HospitalName", hospitalId);
 
@@ -694,6 +722,44 @@ namespace HospitalInventoryManagement.Web.Controllers
                     expiryDate = "",
                     expiryIso = ""
                 }
+            });
+        }
+
+        // ====== Sayım Dönemi ======
+
+        // Seçili hastanenin aktif sayım bilgisini döndürür (ekranda göstermek için)
+        [HttpGet]
+        public JsonResult GetActiveSayimInfo(int hospitalId)
+        {
+            if (hospitalId <= 0) return Json(new { success = false });
+            var sayim = _stockService.GetActiveSayim(hospitalId);
+            if (sayim == null)
+                return Json(new { success = true, exists = false });
+
+            return Json(new
+            {
+                success = true,
+                exists = true,
+                sayimNo = sayim.SayimNo,
+                createdDate = sayim.CreatedDate.ToString("dd.MM.yyyy HH:mm")
+            });
+        }
+
+        // Seçili hastane için yeni sayım başlatır (aktifi kapatır, No+1 yeni aktif açar)
+        [HttpPost]
+        public async Task<JsonResult> StartNewSayim(int hospitalId)
+        {
+            var user = await _userManager.GetUserAsync(User);
+            if (user == null) return Json(new { success = false, message = "Oturum bulunamadı." });
+            if (hospitalId <= 0 || !_context.Hospitals.Any(h => h.HospitalID == hospitalId))
+                return Json(new { success = false, message = "Geçerli bir hastane seçin." });
+
+            var sayim = _stockService.StartNewSayim(hospitalId, user.Id);
+            return Json(new
+            {
+                success = true,
+                sayimNo = sayim.SayimNo,
+                createdDate = sayim.CreatedDate.ToString("dd.MM.yyyy HH:mm")
             });
         }
 

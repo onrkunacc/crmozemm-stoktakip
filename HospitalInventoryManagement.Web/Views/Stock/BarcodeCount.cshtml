@@ -37,6 +37,18 @@
                 </div>
             </div>
 
+            <!-- Aktif sayım bilgisi + yeni sayım -->
+            <div class="row g-2 align-items-center mb-3">
+                <div class="col-md-8">
+                    <div class="alert alert-info py-2 mb-0" id="sayimBanner">Aktif sayım yükleniyor...</div>
+                </div>
+                <div class="col-md-4">
+                    <button type="button" class="btn btn-outline-danger w-100" onclick="startNewSayim()">
+                        <i class="fas fa-rotate"></i> Yeni Sayım Başlat
+                    </button>
+                </div>
+            </div>
+
             <p class="text-muted">
                 Barkodu okutun (el okuyucu ya da <b>Kamerayla Tara</b>), birim (Kutu / Test / Flakon) seçip miktarı girin ve <b>Listeye Ekle</b> deyin.
                 Tüm satırlar test cinsine çevrilip ürün bazında toplanır. En sonda <b>Sayımı Kaydet</b> ile tek seferde işlenir.
@@ -277,15 +289,15 @@
         } else {
             lines.forEach((l, i) => {
                 body.innerHTML += `<tr>
-                        <td>${l.productName}</td>
-                        <td>${l.referenceNumber}</td>
-                        <td>${l.lotNumber || ""}</td>
-                        <td>${l.expiryDate || "-"}</td>
-                        <td>${l.unit}</td>
-                        <td class="text-end">${l.quantity}</td>
-                        <td class="text-end">${l.tests}</td>
-                        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(${i})">Sil</button></td>
-                    </tr>`;
+                            <td>${l.productName}</td>
+                            <td>${l.referenceNumber}</td>
+                            <td>${l.lotNumber || ""}</td>
+                            <td>${l.expiryDate || "-"}</td>
+                            <td>${l.unit}</td>
+                            <td class="text-end">${l.quantity}</td>
+                            <td class="text-end">${l.tests}</td>
+                            <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(${i})">Sil</button></td>
+                        </tr>`;
             });
         }
 
@@ -320,13 +332,61 @@
     }
 
     // ===== Hastane seçimini hatırla (kaydet sonrası sayfa yenilense de kalsın) =====
+    async function refreshSayimBanner() {
+        const hid = document.getElementById('hospitalSelect').value;
+        const banner = document.getElementById('sayimBanner');
+        if (!hid) { banner.className = 'alert alert-secondary py-2 mb-0'; banner.textContent = 'Hastane seçin.'; return; }
+        try {
+            const res = await fetch(`/Stock/GetActiveSayimInfo?hospitalId=${encodeURIComponent(hid)}`);
+            const data = await res.json();
+            if (data.success && data.exists) {
+                banner.className = 'alert alert-info py-2 mb-0';
+                banner.innerHTML = `Aktif Sayım: <b>#${data.sayimNo}</b> · ${data.createdDate} — okutulanlar bu sayıma eklenir.`;
+            } else {
+                banner.className = 'alert alert-secondary py-2 mb-0';
+                banner.textContent = 'Bu hastane için henüz sayım yok. İlk kayıtta Sayım #1 otomatik açılır.';
+            }
+        } catch {
+            banner.className = 'alert alert-warning py-2 mb-0';
+            banner.textContent = 'Sayım bilgisi alınamadı.';
+        }
+    }
+
+    async function startNewSayim() {
+        const hid = document.getElementById('hospitalSelect').value;
+        if (!hid) { alert('Önce hastane seçin.'); return; }
+        if (!confirm('Bu hastane için YENİ bir sayım başlatılsın mı?\nMevcut sayım kapanır; güncel stok yeni sayıma göre oluşur.')) return;
+        try {
+            const res = await fetch('/Stock/StartNewSayim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'hospitalId=' + encodeURIComponent(hid)
+            });
+            const data = await res.json();
+            if (data.success) {
+                alert('Yeni sayım başlatıldı: #' + data.sayimNo);
+                // Yeni boş sayıma geçtik; ekrandaki listeyi de temizleyelim
+                lines = []; render();
+                refreshSayimBanner();
+            } else {
+                alert(data.message || 'Yeni sayım başlatılamadı.');
+            }
+        } catch {
+            alert('İşlem sırasında hata oluştu.');
+        }
+    }
+
     (function() {
         const sel = document.getElementById('hospitalSelect');
         const saved = localStorage.getItem(HOSPITAL_KEY);
         if (saved && [...sel.options].some(o => o.value === saved)) {
             sel.value = saved;
         }
-        sel.addEventListener('change', () => localStorage.setItem(HOSPITAL_KEY, sel.value));
+        sel.addEventListener('change', () => {
+            localStorage.setItem(HOSPITAL_KEY, sel.value);
+            refreshSayimBanner();
+        });
+        refreshSayimBanner(); // ilk yükleme
     })();
 
     // ===== Kamerayla tarama (ZXing) =====
