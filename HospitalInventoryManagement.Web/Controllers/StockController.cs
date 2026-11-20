@@ -4,6 +4,7 @@ using HospitalInventoryManagement.Data.Context;
 using HospitalInventoryManagement.Data.DTOs;
 using HospitalInventoryManagement.Data.Models;
 using HospitalInventoryManagement.Web.ViewModel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -19,12 +20,14 @@ namespace HospitalInventoryManagement.Web.Controllers
         private readonly IStockService _stockService;
         private readonly ApplicationDbContext _context;
         private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IConfiguration _config;
 
-        public StockController(IStockService stockService, ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+        public StockController(IStockService stockService, ApplicationDbContext context, UserManager<ApplicationUser> userManager, IConfiguration config)
         {
             _stockService = stockService;
             _context = context;
             _userManager = userManager;
+            _config = config;
         }
 
         // ================================================================
@@ -926,6 +929,72 @@ namespace HospitalInventoryManagement.Web.Controllers
                 TempData["ErrorMessage"] = "Flakon değişim işlemi sırasında bir hata oluştu.";
                 return RedirectToAction("Index");
             }
+        }
+
+
+        [HttpGet("/Stock/ApiList")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ApiList(
+            [FromQuery] int? hospitalId,
+            [FromQuery] int? sayimNo,
+            [FromQuery] string? apiKey,
+            [FromHeader(Name = "X-Api-Key")] string? headerKey,
+            CancellationToken ct)
+        {
+            // ─── API KEY DOĞRULAMA ───
+            var expected = _config["StockApi:ApiKey"];
+            var provided = headerKey ?? apiKey;
+            if (string.IsNullOrEmpty(expected) || string.IsNullOrEmpty(provided) || provided != expected)
+                return Unauthorized(new { success = false, message = "Invalid or missing API key." });
+
+            // ─── Query ───
+            var q = _context.Stocks
+                .Include(s => s.Product).ThenInclude(p => p.ProductType)
+                .Include(s => s.Product).ThenInclude(p => p.Platform)
+                .Include(s => s.Hospital)
+                .Include(s => s.Sayim)
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (hospitalId.HasValue && hospitalId.Value > 0)
+                q = q.Where(s => s.HospitalID == hospitalId.Value);
+
+            // Sayım filtresi: belirtilen sayım, yoksa aktif
+            if (sayimNo.HasValue && sayimNo.Value > 0)
+                q = q.Where(s => s.Sayim.SayimNo == sayimNo.Value);
+            else
+                q = q.Where(s => s.Sayim.IsActive);
+
+            var list = await q.Select(s => new StockApiItemDto
+            {
+                StockId = s.StockID,
+                HospitalId = s.HospitalID,
+                HospitalName = s.Hospital.HospitalName,
+                ProductId = s.ProductID,
+                ProductName = s.Product.ProductName,
+                ReferenceNumber = s.Product.ReferenceNumber,
+                ProductType = s.Product.ProductType != null ? s.Product.ProductType.TypeName : null,
+                Platform = s.Product.Platform != null ? s.Product.Platform.PlatformName : null,
+                BoxCount = s.Quantity,
+                FlaconCount = s.FlaconCount,
+                TestCount = s.TestCount,
+                BoxTextCount = s.Product.BoxTextCount,
+                FlaconCountPerBox = s.Product.FlaconCountPerBox,
+                LotNumber = s.LotNumber,
+                ExpiryDate = s.ExpiryDate,
+                LastUpdated = s.LastUpdated,
+                SayimNo = s.Sayim != null ? s.Sayim.SayimNo : 0,
+                SayimAktifMi = s.Sayim != null && s.Sayim.IsActive,
+                SayimTarihi = s.Sayim != null ? s.Sayim.CreatedDate : DateTime.MinValue
+            }).ToListAsync(ct);
+
+            return Ok(new StockApiResponseDto
+            {
+                Success = true,
+                Count = list.Count,
+                GeneratedAt = DateTime.Now,
+                Items = list
+            });
         }
     }
 }

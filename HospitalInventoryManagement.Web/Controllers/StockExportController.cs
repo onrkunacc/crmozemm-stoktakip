@@ -23,11 +23,12 @@ namespace HospitalInventoryManagement.Web.Controllers
             _context = context;
         }
 
-        private (System.Collections.Generic.List<Stock> stocks, string scopeName) GetFiltered(string searchQuery, int? hospitalId)
+        private (System.Collections.Generic.List<Stock> stocks, string scopeName) GetFiltered(string searchQuery, int? hospitalId, int? sayimNo)
         {
             var query = _context.Stocks
                 .Include(s => s.Product).ThenInclude(p => p.Category)
                 .Include(s => s.Hospital)
+                .Include(s => s.Sayim)
                 .AsQueryable();
 
             if (hospitalId.HasValue && hospitalId.Value > 0)
@@ -35,6 +36,13 @@ namespace HospitalInventoryManagement.Web.Controllers
 
             if (!string.IsNullOrWhiteSpace(searchQuery))
                 query = query.Where(s => s.Product.ProductName.Contains(searchQuery));
+
+            // Sayım filtresi: seçilen sayım numarası; yoksa güncel (aktif) sayım.
+            // Stok Listesi ekranı ile birebir aynı davranış.
+            if (sayimNo.HasValue && sayimNo.Value > 0)
+                query = query.Where(s => s.Sayim.SayimNo == sayimNo.Value);
+            else
+                query = query.Where(s => s.Sayim.IsActive);
 
             var stocks = query
                 .OrderBy(s => s.Hospital.HospitalName)
@@ -44,6 +52,10 @@ namespace HospitalInventoryManagement.Web.Controllers
             string scope = (hospitalId.HasValue && hospitalId.Value > 0)
                 ? (_context.Hospitals.FirstOrDefault(h => h.HospitalID == hospitalId.Value)?.HospitalName ?? "Hastane")
                 : "Tüm Hastaneler";
+
+            scope += (sayimNo.HasValue && sayimNo.Value > 0)
+                ? $" · Sayım #{sayimNo.Value}"
+                : " · Güncel Sayım";
 
             return (stocks, scope);
         }
@@ -71,11 +83,11 @@ namespace HospitalInventoryManagement.Web.Controllers
 
         // ================= EXCEL =================
         [HttpGet]
-        public IActionResult Excel(string searchQuery, int? hospitalId)
+        public IActionResult Excel(string searchQuery, int? hospitalId, int? sayimNo)
         {
             ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
             var now = DateTime.Now; var soon = now.AddDays(60);
-            var (stocks, scope) = GetFiltered(searchQuery, hospitalId);
+            var (stocks, scope) = GetFiltered(searchQuery, hospitalId, sayimNo);
 
             using var package = new ExcelPackage();
             var ws = package.Workbook.Worksheets.Add("Stok");
@@ -163,10 +175,10 @@ namespace HospitalInventoryManagement.Web.Controllers
 
         // ================= PDF =================
         [HttpGet]
-        public IActionResult Pdf(string searchQuery, int? hospitalId)
+        public IActionResult Pdf(string searchQuery, int? hospitalId, int? sayimNo)
         {
             var now = DateTime.Now; var soon = now.AddDays(60);
-            var (stocks, scope) = GetFiltered(searchQuery, hospitalId);
+            var (stocks, scope) = GetFiltered(searchQuery, hospitalId, sayimNo);
 
             var stream = new MemoryStream();
             var document = new Document(PageSize.A4.Rotate(), 24, 24, 28, 28);

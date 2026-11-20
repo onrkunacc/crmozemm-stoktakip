@@ -100,11 +100,11 @@
             <!-- Dışa aktar -->
             <div class="mb-3 d-flex gap-2 flex-wrap">
                 <a class="btn btn-success btn-sm"
-                   href="@Url.Action("Excel", "StockExport", new { hospitalId = ViewBag.SelectedHospitalId, searchQuery = (string)ViewBag.SearchQuery })">
+                   href="@Url.Action("Excel", "StockExport", new { hospitalId = ViewBag.SelectedHospitalId, searchQuery = (string)ViewBag.SearchQuery, sayimNo = ViewBag.SayimNo })">
                     <i class="fas fa-file-excel"></i> Excel'e Aktar
                 </a>
                 <a class="btn btn-danger btn-sm"
-                   href="@Url.Action("Pdf", "StockExport", new { hospitalId = ViewBag.SelectedHospitalId, searchQuery = (string)ViewBag.SearchQuery })">
+                   href="@Url.Action("Pdf", "StockExport", new { hospitalId = ViewBag.SelectedHospitalId, searchQuery = (string)ViewBag.SearchQuery, sayimNo = ViewBag.SayimNo })">
                     <i class="fas fa-file-pdf"></i> PDF'e Aktar
                 </a>
             </div>

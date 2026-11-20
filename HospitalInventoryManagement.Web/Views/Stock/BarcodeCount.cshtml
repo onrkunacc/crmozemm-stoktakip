@@ -289,15 +289,15 @@
         } else {
             lines.forEach((l, i) => {
                 body.innerHTML += `<tr>
-                            <td>${l.productName}</td>
-                            <td>${l.referenceNumber}</td>
-                            <td>${l.lotNumber || ""}</td>
-                            <td>${l.expiryDate || "-"}</td>
-                            <td>${l.unit}</td>
-                            <td class="text-end">${l.quantity}</td>
-                            <td class="text-end">${l.tests}</td>
-                            <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(${i})">Sil</button></td>
-                        </tr>`;
+                        <td>${l.productName}</td>
+                        <td>${l.referenceNumber}</td>
+                        <td>${l.lotNumber || ""}</td>
+                        <td>${l.expiryDate || "-"}</td>
+                        <td>${l.unit}</td>
+                        <td class="text-end">${l.quantity}</td>
+                        <td class="text-end">${l.tests}</td>
+                        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLine(${i})">Sil</button></td>
+                    </tr>`;
             });
         }
 

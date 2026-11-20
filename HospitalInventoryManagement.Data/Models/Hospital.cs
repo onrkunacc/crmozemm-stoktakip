@@ -15,5 +15,6 @@ namespace HospitalInventoryManagement.Data.Models
 
         public ICollection<Stock> Stocks { get; set; }
 
+
     }
 }

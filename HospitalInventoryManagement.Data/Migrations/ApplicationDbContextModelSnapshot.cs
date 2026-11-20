@@ -127,7 +127,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasKey("CategoryID");
 
-                    b.ToTable("Categories");
+                    b.ToTable("Categories", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.ErrorLogs", b =>
@@ -151,7 +151,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ErrorLogs");
+                    b.ToTable("ErrorLogs", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Hospital", b =>
@@ -168,7 +168,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasKey("HospitalID");
 
-                    b.ToTable("Hospitals");
+                    b.ToTable("Hospitals", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Message", b =>
@@ -209,7 +209,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("UserID");
 
-                    b.ToTable("Messages");
+                    b.ToTable("Messages", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.MonthlyStatistics", b =>
@@ -237,7 +237,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("HospitalID");
 
-                    b.ToTable("MonthlyStatistics");
+                    b.ToTable("MonthlyStatistics", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Platform", b =>
@@ -254,7 +254,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasKey("PlatformID");
 
-                    b.ToTable("Platforms");
+                    b.ToTable("Platforms", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Product", b =>
@@ -299,7 +299,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("TypeID");
 
-                    b.ToTable("Products");
+                    b.ToTable("Products", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.ProductRequest", b =>
@@ -336,7 +336,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("RequestedByUserID");
 
-                    b.ToTable("ProductRequests");
+                    b.ToTable("ProductRequests", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.ProductType", b =>
@@ -353,7 +353,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasKey("TypeID");
 
-                    b.ToTable("ProductTypes");
+                    b.ToTable("ProductTypes", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Sayim", b =>
@@ -389,7 +389,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("HospitalID");
 
-                    b.ToTable("Sayims");
+                    b.ToTable("Sayims", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.Stock", b =>
@@ -435,7 +435,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("SayimID");
 
-                    b.ToTable("Stocks");
+                    b.ToTable("Stocks", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.StockTransaction", b =>
@@ -488,7 +488,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("StockTransactions");
+                    b.ToTable("StockTransactions", (string)null);
                 });
 
             modelBuilder.Entity("HospitalInventoryManagement.Data.Models.TestTemplate", b =>
@@ -513,7 +513,7 @@ namespace HospitalInventoryManagement.Data.Migrations
 
                     b.HasIndex("HospitalID");
 
-                    b.ToTable("TestTemplates");
+                    b.ToTable("TestTemplates", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
